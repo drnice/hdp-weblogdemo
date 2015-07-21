@@ -26,6 +26,8 @@ fi
 case $distro in
 	centos | rhel)
 		apache_base=/etc/httpd
+		mysql_pkg=mysql
+                php_pkg=php
 		apache_pkg=httpd
 		apache_conf_dir="$apache_base/conf.d"
 		apache_restart_cmd="service httpd restart"
@@ -36,7 +38,9 @@ case $distro in
 		;;
 	ubuntu)
 		apache_base=/etc/apache2
-		apackhe_pkg=apache2
+                mysql_pkg=mysql
+                php_pkg=php
+		apache_pkg=apache2
 		apache_conf_dir="$apache_base/sites_available"
 		apache_restart_cmd="service apache2 restart"
 		install_cmd="apt-get install"
