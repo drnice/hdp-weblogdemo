@@ -2,6 +2,7 @@
 
 ### Config:
 dir="$(dirname $0)"
+
 if ! . $dir/conf.sh
 then
 	echo "Unable to load configuration file $dir/conf.sh!  Aborting..."
@@ -13,7 +14,7 @@ then
 	echo "Unable to load distro detection script $dir/distro.sh!  Aborting..."
 	exit 1
 fi
-###
+##
 
 # This needs root
 if [[ $EUID -ne 0 ]]
@@ -35,6 +36,113 @@ then
 else
 	echo "Apache already installed; skipping install."
 fi
+
+##### DR Mysql installation
+if ! check_package_installed $mysql_pkg
+then
+	if ! $install_cmd $mysql_pkg
+	then
+		echo "Error installing $mysql_pkg!  Aborting..."
+		exit 1
+	fi
+else
+	echo "MySQL already installed; skipping install."
+fi
+
+##### DR php installation
+if ! check_package_installed $php_pkg
+then
+        if ! $install_cmd $php_pkg
+        then
+                echo "Error installing $php_pkg!  Aborting..."
+                exit 1
+        fi
+else
+        echo "PHP already installed; skipping install."
+fi
+
+###### DR MySQL Database setup 
+cat << EOF > "$dir/createdb.sql"
+CREATE DATABASE IF NOT EXISTS test;
+use test;
+DROP TABLE IF EXISTS admin;
+CREATE TABLE admin ( id INT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(30) UNIQUE, passcode VARCHAR(30) );
+insert into test.admin values(1,'drice','hadoop');
+insert into test.admin values(2,'eorgad','hadoop');
+insert into test.admin values(3,'rmccollam','hadoop');
+insert into test.admin values(4,'tbenton','hadoop');
+insert into test.admin values(5,'agrande','hadoop');
+insert into test.admin values(6,'bdubois','hadoop');
+insert into test.admin values(7,'mcarrillo','hadoop');
+grant all on test.* to 'drice'@'%' identified by 'hadoop';
+flush privileges;
+EOF
+
+`mysql < $dir/createdb.sql`
+
+#if ! . $dir/distro.sh
+#then
+#        echo "Unable to load distro detection script $dir/distro.sh!  Aborting..."
+#        exit 1
+#fi
+
+
+######## DR Config.php setup
+cat << EOF > "$dir/config.php";
+<?php
+define('DB_SERVER', 'localhost');
+define('DB_USERNAME', 'drice');
+define('DB_PASSWORD', 'hadoop');
+define('DB_DATABASE', 'test');
+$db = mysqli_connect(DB_SERVER,DB_USERNAME,DB_PASSWORD,DB_DATABASE);
+?>
+EOF
+
+
+cat << EOF > "$dir/login.php";
+<?php
+include("config.php");
+session_start();
+if($_SERVER["REQUEST_METHOD"] == "POST")
+{
+// username and password sent from Form
+$myusername=mysqli_real_escape_string($db,$_POST['username']);
+$mypassword=mysqli_real_escape_string($db,$_POST['password']);
+
+//echo $myusername;
+//echo $mypassword;
+
+$sql="SELECT id FROM admin WHERE username='$myusername' and passcode='$mypassword'";
+$result=mysqli_query($db,$sql);
+$row=mysqli_fetch_array($result,MYSQLI_ASSOC);
+$active=$row['active'];
+$count=mysqli_num_rows($result);
+
+
+// If result matched $myusername and $mypassword, table row must be 1 row
+if($count==1)
+{
+//session_register("myusername");
+$_SESSION['login_user']=$myusername;
+
+header("location: welcome.php");
+}
+else
+{
+$error="Your Login Name or Password is invalid";
+}
+}
+?>
+<form action="" method="post">
+<label>UserName :</label>
+<input type="text" name="username"/><br />
+<label>Password :</label>
+<input type="password" name="password"/><br/>
+<input type="submit" value=" Submit "/><br />
+</form>
+EOF
+
+read -n1 -r -p "Press space to continue..." key
 
 ##### Set up a new site
 if ! mkdir -p "/opt/$sitename/www"
@@ -64,6 +172,12 @@ Listen $port
   CustomLog $webaccesslog combined
 </VirtualHost>
 EOF
+
+
+##### Login Screen DR
+
+
+
 
 cat << EOF > "/opt/$sitename/www/index.html"
 <!DOCTYPE html>
